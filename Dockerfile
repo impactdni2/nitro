@@ -159,7 +159,7 @@ RUN ./download-machine.sh consensus-v7 0x53dd4b9a3d807a8cbb4d58fbfc6a0857c3846d4
 RUN ./download-machine.sh consensus-v9 0xd1842bfbe047322b3f3b3635b5fe62eb611557784d17ac1d2b1ce9c170af6544
 RUN ./download-machine.sh consensus-v10 0x6b94a7fc388fd8ef3def759297828dc311761e88d8179c7ee8d3887dc554f3c3
 
-FROM golang:1.19-bullseye as node-builder
+FROM golang:1.20-bullseye as node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""
@@ -174,12 +174,12 @@ COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 RUN go mod download
-COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
 COPY --from=contracts-builder workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/
 COPY --from=prover-export / target/
+COPY . ./
 RUN mkdir -p target/bin
 COPY .nitro-tag.txt /nitro-tag.txt
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build
@@ -196,69 +196,61 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "--binary-path", "/usr/local/bin/", "--
 
 FROM debian:bullseye-slim as nitro-node-slim
 WORKDIR /home/user
-COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
-COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
-COPY --from=machine-versions /workspace/machines /home/user/target/machines
-USER root
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
-    apt-get install -y \
-    ca-certificates \
-    wabt && \
+    apt-get install -y ca-certificates wabt curl procps jq rsync node-ws vim-tiny python3 dnsutils && \
     /usr/sbin/update-ca-certificates && \
-    useradd -s /bin/bash user && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /usr/share/doc/*
+
+COPY --from=machine-versions /workspace/machines /home/user/target/machines
+COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
+COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
+
+RUN useradd -s /bin/bash user && \
     mkdir -p /home/user/l1keystore && \
     mkdir -p /home/user/.arbitrum/local/nitro && \
     chown -R user:user /home/user && \
-    chmod -R 555 /home/user/target/machines && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* && \
-    nitro --version
-
+    chmod -R 555 /home/user/target/machines
+RUN nitro --version
 USER user
+
 WORKDIR /home/user/
 ENTRYPOINT [ "/usr/local/bin/nitro" ]
 
-FROM nitro-node-slim as nitro-node
-USER root
-COPY --from=prover-export /bin/jit                        /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/daserver  /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/datool    /usr/local/bin/
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y \
-    curl procps jq rsync \
-    node-ws vim-tiny python3 \
-    dnsutils && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* && \
-    nitro --version
 
-USER user
+# FROM nitro-node-slim as nitro-node
+# USER root
+# COPY --from=prover-export /bin/jit                        /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/daserver  /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/datool    /usr/local/bin/
+# RUN  nitro --version
+# USER user
 
-FROM nitro-node as nitro-node-dev
-USER root
-# Copy in latest WASM module root
-RUN rm -f /home/user/target/machines/latest
-COPY --from=prover-export /bin/jit                                         /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/deploy                     /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/seq-coordinator-invalidate /usr/local/bin/
-COPY --from=module-root-calc /workspace/target/machines/latest/machine.wavm.br /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/until-host-io-state.bin /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y \
-    sudo && \
-    chmod -R 555 /home/user/target/machines && \
-    adduser user sudo && \
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* && \
-    nitro --version
 
-USER user
+# FROM nitro-node as nitro-node-dev
+# USER root
+# RUN export DEBIAN_FRONTEND=noninteractive && \
+#     apt-get update && \
+#     apt-get install -y \
+#     sudo && \
+#     chmod -R 555 /home/user/target/machines && \
+#     adduser user sudo && \
+#     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/* /usr/share/doc/*
+
+# # Copy in latest WASM module root
+# RUN rm -f /home/user/target/machines/latest
+# COPY --from=prover-export /bin/jit                                         /usr/local/bin/
+# COPY --from=module-root-calc /workspace/target/machines/latest/machine.wavm.br /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/until-host-io-state.bin /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
+# COPY --from=node-builder  /workspace/target/bin/deploy                     /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/seq-coordinator-invalidate /usr/local/bin/
+# RUN nitro --version
+# USER user
 
 FROM nitro-node as nitro-node-default
 # Just to ensure nitro-node-dist is default

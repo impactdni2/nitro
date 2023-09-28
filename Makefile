@@ -87,7 +87,8 @@ push: lint test-go .make/fmt
 all: build build-replay-env test-gen-proofs
 	@touch .make/all
 
-build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver datool seq-coordinator-invalidate)
+# build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver datool seq-coordinator-invalidate)
+build: $(patsubst %,$(output_root)/bin/%, nitro relay)
 	@printf $(done)
 
 build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib
@@ -158,8 +159,8 @@ clean:
 
 docker:
 	docker build -t nitro-node-slim --target nitro-node-slim .
-	docker build -t nitro-node --target nitro-node .
-	docker build -t nitro-node-dev --target nitro-node-dev .
+	# docker build -t nitro-node --target nitro-node .
+	# docker build -t nitro-node-dev --target nitro-node-dev .
 
 # regular build rules
 
