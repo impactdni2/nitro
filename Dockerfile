@@ -178,25 +178,25 @@ COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 RUN go mod download
-COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
 COPY --from=contracts-builder workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/
 COPY --from=prover-export / target/
+COPY . ./
 RUN mkdir -p target/bin
 COPY .nitro-tag.txt /nitro-tag.txt
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build
 
-FROM node-builder as fuzz-builder
-RUN mkdir fuzzers/
-RUN ./scripts/fuzz.bash --build --binary-path /workspace/fuzzers/
+# FROM node-builder as fuzz-builder
+# RUN mkdir fuzzers/
+# RUN ./scripts/fuzz.bash --build --binary-path /workspace/fuzzers/
 
-FROM debian:bullseye-slim as nitro-fuzzer
-COPY --from=fuzz-builder /workspace/fuzzers/*.fuzz /usr/local/bin/
-COPY ./scripts/fuzz.bash /usr/local/bin
-RUN mkdir /fuzzcache
-ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "--binary-path", "/usr/local/bin/", "--fuzzcache-path", "/fuzzcache" ]
+# FROM debian:bullseye-slim as nitro-fuzzer
+# COPY --from=fuzz-builder /workspace/fuzzers/*.fuzz /usr/local/bin/
+# COPY ./scripts/fuzz.bash /usr/local/bin
+# RUN mkdir /fuzzcache
+# ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "--binary-path", "/usr/local/bin/", "--fuzzcache-path", "/fuzzcache" ]
 
 FROM debian:bullseye-slim as nitro-node-slim
 WORKDIR /home/user
@@ -225,46 +225,46 @@ USER user
 WORKDIR /home/user/
 ENTRYPOINT [ "/usr/local/bin/nitro" ]
 
-FROM nitro-node-slim as nitro-node
-USER root
-COPY --from=prover-export /bin/jit                        /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/daserver  /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/datool    /usr/local/bin/
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y \
-    curl procps jq rsync \
-    node-ws vim-tiny python3 \
-    dnsutils && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* /var/cache/ldconfig/aux-cache /usr/lib/python3.9/__pycache__/ /usr/lib/python3.9/*/__pycache__/ /var/log/* && \
-    nitro --version
+# FROM nitro-node-slim as nitro-node
+# USER root
+# COPY --from=prover-export /bin/jit                        /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/daserver  /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/datool    /usr/local/bin/
+# RUN export DEBIAN_FRONTEND=noninteractive && \
+#     apt-get update && \
+#     apt-get install -y \
+#     curl procps jq rsync \
+#     node-ws vim-tiny python3 \
+#     dnsutils && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/* /usr/share/doc/* /var/cache/ldconfig/aux-cache /usr/lib/python3.9/__pycache__/ /usr/lib/python3.9/*/__pycache__/ /var/log/* && \
+#     nitro --version
 
-USER user
+# USER user
 
-FROM nitro-node as nitro-node-dev
-USER root
-# Copy in latest WASM module root
-RUN rm -f /home/user/target/machines/latest
-COPY --from=prover-export /bin/jit                                         /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/deploy                     /usr/local/bin/
-COPY --from=node-builder  /workspace/target/bin/seq-coordinator-invalidate /usr/local/bin/
-COPY --from=module-root-calc /workspace/target/machines/latest/machine.wavm.br /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/until-host-io-state.bin /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /home/user/target/machines/latest/
-COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y \
-    sudo && \
-    chmod -R 555 /home/user/target/machines && \
-    adduser user sudo && \
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* /var/cache/ldconfig/aux-cache /usr/lib/python3.9/__pycache__/ /usr/lib/python3.9/*/__pycache__/ /var/log/* && \
-    nitro --version
+# FROM nitro-node as nitro-node-dev
+# USER root
+# # Copy in latest WASM module root
+# RUN rm -f /home/user/target/machines/latest
+# COPY --from=prover-export /bin/jit                                         /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/deploy                     /usr/local/bin/
+# COPY --from=node-builder  /workspace/target/bin/seq-coordinator-invalidate /usr/local/bin/
+# COPY --from=module-root-calc /workspace/target/machines/latest/machine.wavm.br /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/until-host-io-state.bin /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /home/user/target/machines/latest/
+# COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
+# RUN export DEBIAN_FRONTEND=noninteractive && \
+#     apt-get update && \
+#     apt-get install -y \
+#     sudo && \
+#     chmod -R 555 /home/user/target/machines && \
+#     adduser user sudo && \
+#     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/* /usr/share/doc/* /var/cache/ldconfig/aux-cache /usr/lib/python3.9/__pycache__/ /usr/lib/python3.9/*/__pycache__/ /var/log/* && \
+#     nitro --version
 
-USER user
+# USER user
 
-FROM nitro-node as nitro-node-default
+FROM nitro-node-slim as nitro-node-default
 # Just to ensure nitro-node-dist is default
