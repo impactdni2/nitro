@@ -159,8 +159,8 @@ clean:
 
 docker:
 	docker build -t nitro-node-slim --target nitro-node-slim .
-	docker build -t nitro-node --target nitro-node .
-	docker build -t nitro-node-dev --target nitro-node-dev .
+	# docker build -t nitro-node --target nitro-node .
+	# docker build -t nitro-node-dev --target nitro-node-dev .
 
 # regular build rules
 
